@@ -1,0 +1,73 @@
+# Common patterns to ignore in DVC
+# Add patterns to exclude files and directories from being tracked by DVC
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment directories
+venv/
+ENV/
+env/
+.env
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# Testing
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Frontend build artifacts
+frontend/build/
+frontend/dist/
+node_modules/
+
+# MLflow artifacts
+mlruns/
+
+# Metaflow artifacts
+.metaflow/
+metaflow_card_cache/
+
+# Streamlit artifacts
+.streamlit/
+
+# DVC specific
+# Do not ignore .dvc files
+!*.dvc 

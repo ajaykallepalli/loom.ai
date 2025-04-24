@@ -1,0 +1,42 @@
+# AdaIN Style Transfer Training Configuration
+
+# Model settings
+model_type: adain
+image_size: 256
+use_pretrained: true
+save_intermediate: true
+
+# Training settings
+learning_rate: 1.0e-4
+batch_size: 8
+epochs: 10
+content_weight: 1.0
+style_weight: 10.0
+
+# Optimizer settings
+optimizer: adam
+weight_decay: 0.0001
+beta1: 0.9
+beta2: 0.999
+
+# Dataset settings
+content_dataset_path: data/content
+style_dataset_path: data/styles
+train_val_split: 0.9
+shuffle: true
+num_workers: 4
+
+# Augmentation settings
+random_crop: true
+random_flip: true
+normalize: true
+
+# Logging settings
+log_interval: 100
+checkpoint_interval: 1000
+evaluation_interval: 500
+
+# Hardware settings
+use_cuda: true
+gpu_id: 0
+mixed_precision: true 
