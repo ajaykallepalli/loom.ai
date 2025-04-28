@@ -1,0 +1,34 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: nst-fastapi-service # Service name
+spec:
+  template:
+    metadata:
+      annotations:
+        # run.googleapis.com/cpu-throttling: 'false' # Optional: Keep CPU always allocated
+        run.googleapis.com/gpu-zonal-redundancy-disabled: 'true' # Disable zonal redundancy to use specific quota
+        autoscaling.knative.dev/maxScale: '1' # Max instances MUST be 1 for GPU
+    spec:
+      containers:
+      - image: us-west1-docker.pkg.dev/style-transfer-lab/style-repo/nst-fastapi:latest
+        env:
+          - name: FORCE_REDEPLOY # Dummy variable to force new revision
+            value: "2" # Keep this or increment if needed again
+        ports:
+        - containerPort: 8080 # Port your container listens on (from Dockerfile)
+          name: http1
+        resources:
+          limits:
+            cpu: '4' # Minimum 4 CPU for GPU
+            memory: 16Gi # Minimum 16Gi for GPU
+            nvidia.com/gpu: '1' # Request 1 GPU
+        # Add startup probe for containers that take time to start, especially with GPU/model loading
+        startupProbe:
+          failureThreshold: 300 # ~5 minutes (300 * 1s period)
+          periodSeconds: 1
+          tcpSocket:
+            port: 8080 # Must match containerPort
+          timeoutSeconds: 1 # Timeout for each probe attempt
+      nodeSelector:
+        run.googleapis.com/accelerator: nvidia-l4 # Specify the L4 GPU type 
