@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 from google.cloud import storage
 import torch
-from pydantic import BaseModel # Import BaseModel
+from pydantic import BaseModel, Field # Import Field for validation/defaults
 
 # Use relative import because both files are in the 'src' directory/package
 from .style_transfer import run_style_transfer # Correct function name
@@ -16,8 +16,10 @@ app = FastAPI()
 class StylizeRequest(BaseModel):
     content_image_uri: str
     style_image_uri: str
-    # Add other parameters like resolution if needed in the future
-    # resolution: str | None = 'low' 
+    # Add optional parameters with defaults and validation
+    resolution: str = Field(default='low', pattern="^(low|high)$") # Only allow 'low' or 'high'
+    iterations: int = Field(default=300, gt=0, le=1000) # Positive integer, max 1000
+    iterations_hr: int = Field(default=200, gt=0, le=500) # Positive integer, max 500
 
 # --- Configuration ---
 # TODO: Replace with your actual bucket names
@@ -89,10 +91,15 @@ def upload_image_to_gcs(image: Image.Image, bucket_name: str, blob_name: str) ->
 @app.post("/stylize/")
 async def stylize_endpoint(request: StylizeRequest):
     """
-    Applies style transfer given GCS URIs for content and style images in the request body.
-    Example URIs: gs://user-uploads-style-transfer-lab/user123/raw/cat.jpg, gs://style-images-style-transfer-lab/vangogh.jpg
+    Applies style transfer given GCS URIs and optional parameters in the request body.
+    Parameters:
+      - content_image_uri (str): GCS URI for the content image.
+      - style_image_uri (str): GCS URI for the style image.
+      - resolution (str, optional): Output resolution ('low' or 'high'). Defaults to 'low'.
+      - iterations (int, optional): Max iterations for low-res pass. Defaults to 300.
+      - iterations_hr (int, optional): Max iterations for high-res pass. Defaults to 200.
     """
-    print(f"Received request: content='{request.content_image_uri}', style='{request.style_image_uri}'")
+    print(f"Received request: content='{request.content_image_uri}', style='{request.style_image_uri}', resolution='{request.resolution}', iterations={request.iterations}, iterations_hr={request.iterations_hr}")
     
     try:
         # Parse GCS URIs from the request model
@@ -105,19 +112,29 @@ async def stylize_endpoint(request: StylizeRequest):
         
         print(f"Content image size: {content_image.size}, Style image size: {style_image.size}")
 
-        # Perform style transfer using the imported function
-        # The run_style_transfer function handles model loading and device placement internally
-        # It returns (low_res_image, high_res_image). We only use low-res for now.
-        result_image, _ = run_style_transfer(content_img=content_image, 
-                                             style_img=style_image, 
-                                             resolution='low') # Explicitly request low resolution
+        # --- Explicit Debugging --- 
+        print(f"DEBUG: Calling run_style_transfer with max_iter = {request.iterations} and max_iter_hr = {request.iterations_hr}") 
+        # ------------------------
+
+        # Perform style transfer using the imported function and parameters from the request
+        out_img_lr, out_img_hr = run_style_transfer(
+            content_img=content_image, 
+            style_img=style_image, 
+            resolution=request.resolution,
+            max_iter=request.iterations,
+            max_iter_hr=request.iterations_hr
+        )
+        
+        # Determine which image to upload based on requested resolution
+        result_image = out_img_hr if request.resolution == 'high' else out_img_lr
 
         if result_image is None:
-             raise HTTPException(status_code=500, detail="Style transfer failed to produce an image.")
+             # This might happen if low-res succeeded but high-res was requested and failed, 
+             # or if run_style_transfer explicitly returns None on failure.
+             raise HTTPException(status_code=500, detail=f"Style transfer failed to produce an image for resolution '{request.resolution}'.")
 
         # Generate a unique name for the result
-        result_filename = f"stylized_{uuid.uuid4()}.jpg"
-        # Store in a structured path if desired, e.g., based on content blob path
+        result_filename = f"stylized_{request.resolution}_{uuid.uuid4()}.jpg"
         result_blob_name = f"results/{result_filename}" 
 
         # Upload result to GCS
@@ -130,7 +147,6 @@ async def stylize_endpoint(request: StylizeRequest):
         raise http_exc
     except Exception as e:
         print(f"Error during stylization: {e}")
-        # Log the full error traceback here in a real scenario
         import traceback; traceback.print_exc();
         raise HTTPException(status_code=500, detail=f"Internal server error during stylization: {str(e)}")
 

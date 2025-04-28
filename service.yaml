@@ -11,10 +11,10 @@ spec:
         autoscaling.knative.dev/maxScale: '1' # Max instances MUST be 1 for GPU
     spec:
       containers:
-      - image: us-west1-docker.pkg.dev/style-transfer-lab/style-repo/nst-fastapi:latest # Your image URL
+      - image: us-west1-docker.pkg.dev/style-transfer-lab/style-repo/nst-fastapi:latest
         env:
           - name: FORCE_REDEPLOY # Dummy variable to force new revision
-            value: "1" # Increment this value if needed again
+            value: "2" # Keep this or increment if needed again
         ports:
         - containerPort: 8080 # Port your container listens on (from Dockerfile)
           name: http1
