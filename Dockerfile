@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -10,35 +10,29 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set the working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libffi-dev \
-    libssl-dev \
-    git \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Optional: Install system dependencies if needed by your specific model or libraries
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     <your-dependencies> \
+#     && apt-get clean \
+#     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better cache
+# Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Consider using --default-timeout=100 or --no-cache-dir depending on your network/build environment
+RUN pip install -r requirements.txt
 
-# Copy the project code
-COPY . .
+# Copy the source code into the container
+# This includes inference.py, style_transfer.py, and app.py
+COPY src/ /app/src/
 
-# Create necessary directories
-RUN mkdir -p /app/data/content /app/data/styles /app/data/processed
+# Make port 8080 available to the world outside this container
+EXPOSE 8080
 
-# Set environment variables for the application
-ENV API_ENDPOINT=http://localhost:8000
+# Define environment variable for the port (optional, Uvicorn uses --port)
+# ENV PORT=8080
 
-# Expose port for the API
-EXPOSE 8000
-
-# Expose port for Streamlit
-EXPOSE 8501
-
-# Default command (can be overridden by docker-compose.yml or command line)
-CMD ["python", "-m", "api.main"] 
+# Command to run the Uvicorn server for the FastAPI app
+# It looks for the 'app' instance within the 'src.inference' module
+CMD ["uvicorn", "src.inference:app", "--host", "0.0.0.0", "--port", "8080"] 
