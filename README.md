@@ -23,7 +23,39 @@ Loom.AI is an advanced image styling platform that uses neural style transfer te
 - **Adjustable Parameters**: Fine-tune styling intensity, resolution, and more
 - **History Tracking**: View and download your previously styled images
 
-## 🛠️ Architecture
+## ▶️ How to Run (Using Deployed Backend)
+
+This assumes the style transfer backend service is already deployed and running on Google Cloud Run. Follow these steps to run the user interface locally:
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/ynaung24/loom.ai.git
+    cd loom.ai
+    ```
+2.  **Set up Python Environment:**
+    *   Ensure you have Python 3.8+ installed.
+    *   Create and activate a virtual environment (recommended):
+        ```bash
+        python -m venv venv
+        source venv/bin/activate # Or venv\Scripts\activate on Windows
+        ```
+3.  **Install Dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+4.  **Verify Backend URL:**
+    *   Open `src/app.py`.
+    *   Confirm the `FASTAPI_URL` variable points to the correct deployed service URL (it should be set correctly in the repository):
+        ```python
+        FASTAPI_URL = "https://nst-fastapi-service-965013218383.us-central1.run.app"
+        ```
+5.  **Run the Application:**
+    ```bash
+    streamlit run src/app.py
+    ```
+    This will open the Streamlit interface in your browser. Upload images and adjust settings in the sidebar to perform style transfer using the deployed backend.
+
+## ��️ Architecture
 
 ```
 +--------------------------------------------------------------+
