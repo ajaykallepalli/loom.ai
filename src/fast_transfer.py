@@ -72,16 +72,39 @@ class TransformerNet(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+def load_image(image, size=None, scale=None):
+    """
+    Process image exactly like in the Colab notebook
+    
+    Args:
+        image (PIL.Image): The image to process
+        size (int, optional): Size to resize the image to (square)
+        scale (float, optional): Scale factor to resize by
+        
+    Returns:
+        PIL.Image: Processed image
+    """
+    # Convert to RGB if not already
+    img = image.convert('RGB')
+    
+    if size is not None:
+        img = img.resize((size, size), Image.Resampling.LANCZOS)
+    elif scale is not None:
+        new_size = (int(img.width * scale), int(img.height * scale))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
+    # else: keep original size
+    return img
 
 def run_fast_style_transfer(model_path: str, content_image_pil: Image.Image, use_full_size: bool = True, resize_dim: int = 512) -> Image.Image:
     """
     Applies fast style transfer using a pre-trained TransformerNet model.
+    Implementation exactly matches the Colab notebook.
 
     Args:
         model_path (str): Path to the pre-trained .pth model file.
         content_image_pil (PIL.Image): The content image as a PIL object.
         use_full_size (bool): If True, process the image at its original size. 
-                              If False, resize to (resize_dim, resize_dim).
+                             If False, resize to resize_dim.
         resize_dim (int): The dimension to resize to if use_full_size is False.
 
     Returns:
@@ -90,14 +113,24 @@ def run_fast_style_transfer(model_path: str, content_image_pil: Image.Image, use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Fast Transfer - Using device: {device}")
 
-    # Load model
+    # Process image using the exact same approach as Colab
+    if not use_full_size:
+        content_image = load_image(content_image_pil, size=resize_dim)
+        print(f"Resizing image to {resize_dim}x{resize_dim}")
+    else:
+        content_image = load_image(content_image_pil)
+        print(f"Using full image size: {content_image.size}")
+
+    # Load model - exactly like Colab
     model = TransformerNet().to(device)
     try:
         state_dict = torch.load(model_path, map_location=device)
-        # Clean deprecated keys if necessary (from notebook)
+        
+        # Clean deprecated keys - exactly like Colab
         for k in list(state_dict.keys()):
             if "running_mean" in k or "running_var" in k:
                 del state_dict[k]
+                
         model.load_state_dict(state_dict)
         model.eval()
         print(f"Loaded fast transfer model from {model_path}")
@@ -108,34 +141,21 @@ def run_fast_style_transfer(model_path: str, content_image_pil: Image.Image, use
         print(f"ERROR: Failed to load model state_dict: {e}")
         raise
 
-
-    # Preprocess image
-    if not use_full_size:
-        transform = transforms.Compose([
-            transforms.Resize((resize_dim, resize_dim)),
-            transforms.ToTensor(),
-            transforms.Lambda(lambda x: x.mul(255)) # Model expects 0-255 range
-        ])
-        print(f"Resizing image to {resize_dim}x{resize_dim}")
-    else:
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Lambda(lambda x: x.mul(255)) # Model expects 0-255 range
-        ])
-        print("Using full image size")
-        
-    content_tensor = transform(content_image_pil).unsqueeze(0).to(device)
+    # Transform image - exactly like Colab notebook
+    transform = transforms.ToTensor()
+    content_tensor = transform(content_image).unsqueeze(0).mul(255).to(device)
+    print(f"Input tensor shape: {content_tensor.shape}, range: ({content_tensor.min().item():.1f}, {content_tensor.max().item():.1f})")
 
     # Stylize
     with torch.no_grad():
         output_tensor = model(content_tensor).cpu()
 
-    # Convert tensor back to image (0-255 range expected by model)
+    # Convert tensor back to image - exactly like Colab
     output_image = output_tensor.squeeze(0).clamp(0, 255).numpy()
     output_image = output_image.transpose(1, 2, 0).astype('uint8')
     output_image_pil = Image.fromarray(output_image)
     
-    print("Fast style transfer complete.")
+    print(f"Fast style transfer complete. Output size: {output_image_pil.size}")
     return output_image_pil
 
 # Example usage (for testing this file directly)

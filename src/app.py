@@ -266,10 +266,10 @@ elif transfer_mode == "Fast Style Transfer (Pre-trained Style)":
     
     # Style model selection with descriptive names and thumbnail previews
     style_models = {
-        "starry_night": {"name": "Van Gogh's Starry Night", "description": "Swirling blue and yellow patterns"},
-        "kandinsky": {"name": "Kandinsky Abstract", "description": "Bold geometric patterns and colors"},
-        "scream": {"name": "Munch's The Scream", "description": "Emotional expressionist style"},
-        "gauguin": {"name": "Gauguin's Tahitian Style", "description": "Vibrant post-impressionist tropical scenes"}
+        "starry_night": {"name": "Van Gogh's Starry Night", "description": "Swirling blue and yellow patterns", "image": "images/starry_night.jpg"},
+        "kandinsky": {"name": "Kandinsky Abstract", "description": "Bold geometric patterns and colors", "image": "images/kandinsky_1.jpg"},
+        "scream": {"name": "Munch's The Scream", "description": "Emotional expressionist style", "image": "images/scream_1.jpg"},
+        "gauguin": {"name": "Gauguin's Tahitian Style", "description": "Vibrant post-impressionist tropical scenes", "image": "images/gauguin_1.jpg"}
     }
     
     selected_style = st.sidebar.selectbox(
@@ -281,15 +281,27 @@ elif transfer_mode == "Fast Style Transfer (Pre-trained Style)":
     
     st.sidebar.caption(f"*{style_models[selected_style]['description']}*")
     
-    # Resolution option
+    # Resolution options
     st.sidebar.header("⚙️ Transfer Settings")
-    use_full_size = st.sidebar.checkbox(
-        "Use Full Image Resolution", 
-        value=True,
-        help="If unchecked, the image will be resized to 512×512 pixels before applying the style."
+    resolution_option = st.sidebar.radio(
+        "Output Resolution",
+        ('Full Size (Original)', 'Medium (800px)', 'Low (512px)'),
+        index=0,  # Default to Full Size
+        help="Choose the resolution for the stylized output. Lower resolutions process faster."
     )
     
-    resolution_info = "Original size" if use_full_size else "512×512 pixels"
+    # Map the selected option to parameters for the API
+    if resolution_option == 'Full Size (Original)':
+        use_full_size = True
+        resize_dim = None
+    elif resolution_option == 'Medium (800px)':
+        use_full_size = False
+        resize_dim = 800
+    else:  # Low (512px)
+        use_full_size = False
+        resize_dim = 512
+    
+    resolution_info = "Original size" if use_full_size else f"{resize_dim}×{resize_dim} pixels"
     st.sidebar.caption(f"*Output resolution: {resolution_info}*")
 
     # --- Main Area for Previews and Results ---
@@ -303,9 +315,13 @@ elif transfer_mode == "Fast Style Transfer (Pre-trained Style)":
 
     with col2:
         st.subheader(f"Selected Style: {style_models[selected_style]['name']}")
-        # Here you could add example images for each style
-        # For now, we'll just show a placeholder text
-        st.info(f"This will apply the {style_models[selected_style]['name']} style to your image.")
+        # Display example style image from the /images folder
+        try:
+            style_image_path = style_models[selected_style]['image']
+            st.image(style_image_path, caption=f"{style_models[selected_style]['name']} (Example)", use_container_width=True)
+        except Exception as e:
+            st.error(f"Could not load style image: {e}")
+            st.info(f"This will apply the {style_models[selected_style]['name']} style to your image.")
 
     st.markdown("--- ")
     st.subheader("Stylized Result")
@@ -329,7 +345,14 @@ elif transfer_mode == "Fast Style Transfer (Pre-trained Style)":
                 
                 # Prepare the form data with the selected model and resolution setting
                 files = {'content_image': ('image.jpg', content_file.getvalue(), content_file.type)}
-                data = {'use_full_size': use_full_size, 'model_name': selected_style}
+                data = {
+                    'use_full_size': use_full_size,
+                    'model_name': selected_style
+                }
+                
+                # Add resize_dim to the data if it's not None
+                if resize_dim is not None:
+                    data['resize_dim'] = resize_dim
                 
                 # Call the FastAPI endpoint
                 response = requests.post(
@@ -347,7 +370,7 @@ elif transfer_mode == "Fast Style Transfer (Pre-trained Style)":
                 st.session_state.fast_result_image = result_image
                 fast_result_placeholder.image(
                     result_image, 
-                    caption=f"Fast Style Transfer Result ({style_models[selected_style]['name']})", 
+                    caption=f"Fast Style Transfer Result ({style_models[selected_style]['name']}, {resolution_option})", 
                     use_container_width=True
                 )
                 

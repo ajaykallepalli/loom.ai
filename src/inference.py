@@ -193,19 +193,21 @@ async def stylize_endpoint(request: StylizeRequest):
 async def stylize_fast_endpoint(
     use_full_size: bool = Form(True), # Form data to control resizing
     model_name: str = Form(DEFAULT_MODEL), # Form data to select the style model
+    resize_dim: int = Form(512), # New parameter for custom resize dimension
     content_image: UploadFile = File(...)
 ):
     """
     Applies fast style transfer using the pre-trained TransformerNet model.
     Accepts image file directly.
     Parameters:
-      - use_full_size (bool, form data): If True, process at original size. If False, resize to 512x512.
+      - use_full_size (bool, form data): If True, process at original size. If False, resize to resize_dim.
       - model_name (str, form data): Name of the style model to use (starry_night, kandinsky, scream, gauguin).
+      - resize_dim (int, form data): Size to resize to if use_full_size is False. Default is 512.
       - content_image (UploadFile): The image file to stylize.
     Returns:
       - Image response (JPEG format).
     """
-    print(f"Received fast stylize request: use_full_size={use_full_size}, model_name='{model_name}', filename='{content_image.filename}'")
+    print(f"Received fast stylize request: use_full_size={use_full_size}, model_name='{model_name}', resize_dim={resize_dim}, filename='{content_image.filename}'")
     
     if not content_image.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image.")
@@ -233,7 +235,7 @@ async def stylize_fast_endpoint(
             model_path=model_path,
             content_image_pil=pil_image,
             use_full_size=use_full_size,
-            resize_dim=512 # Fixed resize dim if use_full_size is False
+            resize_dim=resize_dim # Use the provided resize_dim instead of fixed 512
         )
         
         print(f"Output stylized image size: {stylized_image_pil.size}")
