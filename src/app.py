@@ -89,7 +89,6 @@ def download_image_from_gcs(_client, gcs_uri: str) -> Image.Image | None:
 
 
 # --- UI Layout --- 
-
 st.title("🎨 Loom.AI Neural Style Transfer")
 st.markdown("Transform your images with the artistic styles of famous paintings.")
 st.markdown("--- ")
@@ -211,7 +210,11 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
                     print(f"Sending request to {STYLIZE_ENDPOINT} with payload: {payload}")
                     
                     # Increase timeout significantly for potentially long GPU tasks
-                    response = requests.post(STYLIZE_ENDPOINT, json=payload, timeout=900)  # 15 minutes timeout
+                    response = requests.post(
+                        STYLIZE_ENDPOINT, 
+                        json=payload, 
+                        timeout=900
+                    )  # 15 minutes timeout
                     response.raise_for_status()
 
                     result_data = response.json()
@@ -225,7 +228,11 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
                         result_image = download_image_from_gcs(storage_client, result_gcs_uri)
                         if result_image:
                             st.session_state.slow_result_image = result_image  # Store in session state
-                            result_placeholder.image(result_image, caption=f"Stylized Result ({resolution_option})", use_container_width=True)
+                            result_placeholder.image(
+                                result_image,
+                                caption=f"Stylized Result ({resolution_option})",
+                                use_container_width=True
+                            )
                         else:
                             result_placeholder.error("Failed to download the result image from GCS.")
                     else:
@@ -352,7 +359,7 @@ else:  # Fast Transfer
                 response = requests.post(
                     FAST_STYLIZE_ENDPOINT,
                     files=files,
-                    data=data, 
+                    data=data,
                     timeout=60  # 60 second timeout should be plenty for fast method
                 )
                 response.raise_for_status()

@@ -290,7 +290,5 @@ async def health_check():
 if __name__ == "__main__":
     # Need to adjust how this runs locally due to relative import
     # Typically run via `python -m src.inference` from the root directory
-    print(f"Using Fast Model Path: {os.path.abspath(FAST_MODEL_PATH)}") # Show path on startup
     print("To run locally, execute from the project root: python -m uvicorn src.inference:app --reload --host 0.0.0.0 --port 8080")
-    # The Dockerfile CMD handles running it correctly in the container.
-    pass 
+    # The Dockerfile CMD handles running it correctly in the container. 

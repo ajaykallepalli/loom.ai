@@ -108,7 +108,7 @@ def run_fast_style_transfer(model_path, content_image_pil, use_full_size=True, r
     Args:
         model_path (str): Path to the pre-trained .pth model file.
         content_image_pil (PIL.Image): The content image as a PIL object.
-        use_full_size (bool): If True, process the image at its original size. 
+        use_full_size (bool): If True, process the image at its original size.
                              If False, resize to resize_dim.
         resize_dim (int): The dimension to resize to if use_full_size is False.
 
@@ -149,6 +149,8 @@ def run_fast_style_transfer(model_path, content_image_pil, use_full_size=True, r
     # Transform image - exactly like Colab notebook
     transform = transforms.ToTensor()
     content_tensor = transform(content_image).unsqueeze(0).mul(255).to(device)
+    
+    # Split the long line over two lines
     print(f"Input tensor shape: {content_tensor.shape}, "
           f"range: ({content_tensor.min().item():.1f}, {content_tensor.max().item():.1f})")
 
@@ -176,7 +178,9 @@ if __name__ == '__main__':
     print("Testing run_fast_style_transfer...")
     try:
         stylized_img_full = run_fast_style_transfer(test_model_path, dummy_image, use_full_size=True)
-        stylized_img_resized = run_fast_style_transfer(test_model_path, dummy_image, use_full_size=False, resize_dim=256)
+        stylized_img_resized = run_fast_style_transfer(
+            test_model_path, dummy_image, use_full_size=False, resize_dim=256
+        )
         
         print(f"Full size output: {stylized_img_full.size}")
         print(f"Resized output: {stylized_img_resized.size}")
@@ -187,6 +191,7 @@ if __name__ == '__main__':
         print("Test successful.")
         
     except FileNotFoundError:
-        print(f"ERROR: Test failed. Model not found at {test_model_path}. Ensure the path is correct and the file exists.")
+        print(f"ERROR: Test failed. Model not found at {test_model_path}. "
+              f"Ensure the path is correct and the file exists.")
     except Exception as e:
         print(f"ERROR: Test failed with exception: {e}") 
