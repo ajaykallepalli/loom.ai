@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 from PIL import Image
-import io
+
 
 # Model Architecture from the reference notebook
 class ConvLayer(nn.Module):
@@ -14,6 +14,7 @@ class ConvLayer(nn.Module):
 
     def forward(self, x):
         return self.conv2d(self.reflection_pad(x))
+
 
 class ResidualBlock(nn.Module):
     def __init__(self, channels):
@@ -29,6 +30,7 @@ class ResidualBlock(nn.Module):
     def forward(self, x):
         return x + self.block(x)
 
+
 class UpsampleConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, upsample=None):
         super().__init__()
@@ -41,6 +43,7 @@ class UpsampleConvLayer(nn.Module):
         if self.upsample:
             x = torch.nn.functional.interpolate(x, scale_factor=self.upsample, mode='nearest')
         return self.conv2d(self.reflection_pad(x))
+
 
 class TransformerNet(nn.Module):
     def __init__(self):
@@ -72,6 +75,7 @@ class TransformerNet(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+
 def load_image(image, size=None, scale=None):
     """
     Process image exactly like in the Colab notebook
@@ -95,7 +99,8 @@ def load_image(image, size=None, scale=None):
     # else: keep original size
     return img
 
-def run_fast_style_transfer(model_path: str, content_image_pil: Image.Image, use_full_size: bool = True, resize_dim: int = 512) -> Image.Image:
+
+def run_fast_style_transfer(model_path, content_image_pil, use_full_size=True, resize_dim=512):
     """
     Applies fast style transfer using a pre-trained TransformerNet model.
     Implementation exactly matches the Colab notebook.
@@ -144,7 +149,8 @@ def run_fast_style_transfer(model_path: str, content_image_pil: Image.Image, use
     # Transform image - exactly like Colab notebook
     transform = transforms.ToTensor()
     content_tensor = transform(content_image).unsqueeze(0).mul(255).to(device)
-    print(f"Input tensor shape: {content_tensor.shape}, range: ({content_tensor.min().item():.1f}, {content_tensor.max().item():.1f})")
+    print(f"Input tensor shape: {content_tensor.shape}, "
+          f"range: ({content_tensor.min().item():.1f}, {content_tensor.max().item():.1f})")
 
     # Stylize
     with torch.no_grad():
@@ -158,13 +164,14 @@ def run_fast_style_transfer(model_path: str, content_image_pil: Image.Image, use
     print(f"Fast style transfer complete. Output size: {output_image_pil.size}")
     return output_image_pil
 
+
 # Example usage (for testing this file directly)
 if __name__ == '__main__':
     # Create a dummy white image for testing
-    dummy_image = Image.new('RGB', (600, 400), color = 'white')
+    dummy_image = Image.new('RGB', (600, 400), color='white')
     # Make sure the model path is correct for your setup
     # This path assumes the script is run from the root directory
-    test_model_path = '../models/starry_night.pth' 
+    test_model_path = '../models/starry_night.pth'
     
     print("Testing run_fast_style_transfer...")
     try:
@@ -180,6 +187,6 @@ if __name__ == '__main__':
         print("Test successful.")
         
     except FileNotFoundError:
-         print(f"ERROR: Test failed. Model not found at {test_model_path}. Ensure the path is correct and the file exists.")
+        print(f"ERROR: Test failed. Model not found at {test_model_path}. Ensure the path is correct and the file exists.")
     except Exception as e:
         print(f"ERROR: Test failed with exception: {e}") 

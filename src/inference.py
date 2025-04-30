@@ -1,34 +1,35 @@
 import io
 import uuid
-import os # Added for model path
+import os  # For model path
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image
 from google.cloud import storage
 import torch
-from pydantic import BaseModel, Field # Import Field for validation/defaults
-import logging # Added for debug listing
+from pydantic import BaseModel, Field  # Import Field for validation/defaults
 
 # Use relative import because both files are in the 'src' directory/package
-from .style_transfer import run_style_transfer # Original slow transfer
-from .fast_transfer import run_fast_style_transfer, TransformerNet # New fast transfer
+from .style_transfer import run_style_transfer  # Original slow transfer
+from .fast_transfer import run_fast_style_transfer  # New fast transfer
 
 app = FastAPI()
+
 
 # --- Pydantic Model for Request Body ---
 class StylizeRequest(BaseModel):
     content_image_uri: str
     style_image_uri: str
     # Add optional parameters with defaults and validation
-    resolution: str = Field(default='low', pattern="^(low|high)$") # Only allow 'low' or 'high'
-    iterations: int = Field(default=300, gt=0, le=1000) # Positive integer, max 1000
-    iterations_hr: int = Field(default=200, gt=0, le=500) # Positive integer, max 500
+    resolution: str = Field(default='low', pattern="^(low|high)$")  # Only allow 'low' or 'high'
+    iterations: int = Field(default=300, gt=0, le=1000)  # Positive integer, max 1000
+    iterations_hr: int = Field(default=200, gt=0, le=500)  # Positive integer, max 500
+
 
 # --- Configuration ---
 # Make sure the Service Account running this has access
-CONTENT_BUCKET_NAME = "user-uploads-style-transfer-lab" # Bucket for user-uploaded content images
-STYLE_BUCKET_NAME = "style-images-style-transfer-lab"   # Bucket for style images (can be public)
-RESULT_BUCKET_NAME = "stylized-results-style-transfer-lab" # Bucket to store results
+CONTENT_BUCKET_NAME = "user-uploads-style-transfer-lab"  # Bucket for user-uploaded content images
+STYLE_BUCKET_NAME = "style-images-style-transfer-lab"    # Bucket for style images (can be public)
+RESULT_BUCKET_NAME = "stylized-results-style-transfer-lab"  # Bucket to store results
 
 # --- Model Loading (Slow Style Transfer) ---
 # The style_transfer module now loads the VGG model internally
@@ -76,13 +77,14 @@ except Exception as e:
 # (e.g., inherited from Cloud Run service account)
 storage_client = None
 
+
 def get_storage_client():
     global storage_client
     if storage_client is None:
         storage_client = storage.Client()
     return storage_client
 
-# --- Helper Functions ---
+
 def download_image_from_gcs(bucket_name: str, blob_name: str) -> Image.Image:
     """Downloads an image from GCS and returns it as a PIL Image."""
     try:
@@ -94,11 +96,12 @@ def download_image_from_gcs(bucket_name: str, blob_name: str) -> Image.Image:
         image = Image.open(io.BytesIO(image_bytes))
         # Ensure image is in RGB format
         if image.mode != 'RGB':
-             image = image.convert('RGB')
+            image = image.convert('RGB')
         return image
     except Exception as e:
         print(f"Error downloading GCS image gs://{bucket_name}/{blob_name}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to download image: {blob_name}")
+
 
 def upload_image_to_gcs(image: Image.Image, bucket_name: str, blob_name: str) -> str:
     """Uploads a PIL image to GCS and returns the public URL (or GCS URI)."""
@@ -108,7 +111,7 @@ def upload_image_to_gcs(image: Image.Image, bucket_name: str, blob_name: str) ->
         blob = bucket.blob(blob_name)
 
         img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG') # Or PNG, adjust as needed
+        image.save(img_byte_arr, format='JPEG')  # Or PNG, adjust as needed
         img_byte_arr.seek(0)
 
         blob.upload_from_file(img_byte_arr, content_type='image/jpeg')
@@ -136,7 +139,9 @@ async def stylize_endpoint(request: StylizeRequest):
       - iterations (int, optional): Max iterations for low-res pass. Defaults to 300.
       - iterations_hr (int, optional): Max iterations for high-res pass. Defaults to 200.
     """
-    print(f"Received request: content='{request.content_image_uri}', style='{request.style_image_uri}', resolution='{request.resolution}', iterations={request.iterations}, iterations_hr={request.iterations_hr}")
+    print(f"Received request: content='{request.content_image_uri}', style='{request.style_image_uri}', "
+          f"resolution='{request.resolution}', iterations={request.iterations}, "
+          f"iterations_hr={request.iterations_hr}")
     
     try:
         # Parse GCS URIs from the request model
@@ -149,8 +154,9 @@ async def stylize_endpoint(request: StylizeRequest):
         
         print(f"Content image size: {content_image.size}, Style image size: {style_image.size}")
 
-        # --- Explicit Debugging --- 
-        print(f"DEBUG: Calling run_style_transfer with max_iter = {request.iterations} and max_iter_hr = {request.iterations_hr}") 
+        # --- Explicit Debugging ---
+        print(f"DEBUG: Calling run_style_transfer with max_iter = {request.iterations} "
+              f"and max_iter_hr = {request.iterations_hr}")
         # ------------------------
 
         # Perform style transfer using the imported function and parameters from the request
@@ -166,9 +172,12 @@ async def stylize_endpoint(request: StylizeRequest):
         result_image = out_img_hr if request.resolution == 'high' else out_img_lr
 
         if result_image is None:
-             # This might happen if low-res succeeded but high-res was requested and failed, 
-             # or if run_style_transfer explicitly returns None on failure.
-             raise HTTPException(status_code=500, detail=f"Style transfer failed to produce an image for resolution '{request.resolution}'.")
+            # This might happen if low-res succeeded but high-res was requested and failed, 
+            # or if run_style_transfer explicitly returns None on failure.
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Style transfer failed to produce an image for resolution '{request.resolution}'."
+            )
 
         # Generate a unique name for the result
         result_filename = f"stylized_{request.resolution}_{uuid.uuid4()}.jpg"
@@ -184,16 +193,17 @@ async def stylize_endpoint(request: StylizeRequest):
         raise http_exc
     except Exception as e:
         print(f"Error during stylization: {e}")
-        import traceback; traceback.print_exc();
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error during stylization: {str(e)}")
 
 
 # === Endpoint for Fast Style Transfer ===
 @app.post("/stylize-fast/")
 async def stylize_fast_endpoint(
-    use_full_size: bool = Form(True), # Form data to control resizing
-    model_name: str = Form(DEFAULT_MODEL), # Form data to select the style model
-    resize_dim: int = Form(512), # New parameter for custom resize dimension
+    use_full_size: bool = Form(True),  # Form data to control resizing
+    model_name: str = Form(DEFAULT_MODEL),  # Form data to select the style model
+    resize_dim: int = Form(512),  # New parameter for custom resize dimension
     content_image: UploadFile = File(...)
 ):
     """
@@ -207,13 +217,17 @@ async def stylize_fast_endpoint(
     Returns:
       - Image response (JPEG format).
     """
-    print(f"Received fast stylize request: use_full_size={use_full_size}, model_name='{model_name}', resize_dim={resize_dim}, filename='{content_image.filename}'")
+    print(f"Received fast stylize request: use_full_size={use_full_size}, model_name='{model_name}', "
+          f"resize_dim={resize_dim}, filename='{content_image.filename}'")
     
     if not content_image.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image.")
 
     if model_name not in AVAILABLE_MODELS:
-        raise HTTPException(status_code=400, detail=f"Invalid model name. Available models: {list(AVAILABLE_MODELS.keys())}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid model name. Available models: {list(AVAILABLE_MODELS.keys())}"
+        )
     
     model_path = AVAILABLE_MODELS[model_name]
     if not os.path.exists(model_path):
@@ -226,7 +240,7 @@ async def stylize_fast_endpoint(
 
         # Ensure image is RGB
         if pil_image.mode != 'RGB':
-             pil_image = pil_image.convert('RGB')
+            pil_image = pil_image.convert('RGB')
 
         print(f"Input image size: {pil_image.size}")
 
@@ -235,7 +249,7 @@ async def stylize_fast_endpoint(
             model_path=model_path,
             content_image_pil=pil_image,
             use_full_size=use_full_size,
-            resize_dim=resize_dim # Use the provided resize_dim instead of fixed 512
+            resize_dim=resize_dim  # Use the provided resize_dim instead of fixed 512
         )
         
         print(f"Output stylized image size: {stylized_image_pil.size}")
@@ -248,19 +262,21 @@ async def stylize_fast_endpoint(
         # Return the image bytes directly in the response
         return StreamingResponse(img_byte_arr, media_type="image/jpeg")
 
-    except FileNotFoundError:
-        print(f"Error: Fast transfer model file not found at {model_path}")
-        raise HTTPException(status_code=500, detail=f"Fast transfer model not configured or found on server.")
     except Exception as e:
-        print(f"Error during fast stylization: {e}")
-        import traceback; traceback.print_exc();
-        raise HTTPException(status_code=500, detail=f"Internal server error during fast stylization: {str(e)}")
+        print(f"Error during fast style transfer: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    """
+    Basic health check endpoint.
+    Returns:
+      - JSON status message.
+    """
+    return JSONResponse(content={"status": "ok"})
 
 # You might want to add model loading logic within a startup event
 # @app.on_event("startup")
