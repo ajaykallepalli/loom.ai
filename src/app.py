@@ -252,87 +252,124 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
             result_placeholder.info("Ready to stylize! Click the button in the sidebar.")
 
 # =======================================
-# ===== Fast Style Transfer         =====
+# ===== Fast Style Transfer (Pre-trained) ===
 # =======================================
 elif transfer_mode == "Fast Style Transfer (Pre-trained Style)":
-    st.header("⚡ Fast Style Transfer (Starry Night Style)")
-    st.markdown("Upload a content image. It will be stylized using a pre-trained model (Starry Night style).")
+    st.header("⚡ Fast Style Transfer")
+    st.markdown("Upload a content image and apply one of our pre-trained artistic styles in seconds!")
 
-    # --- Sidebar Inputs ---
-    st.sidebar.header("🖼️ Upload Image")
-    fast_content_file = st.sidebar.file_uploader("Content Image", type=["jpg", "jpeg", "png"], key="fast_content")
+    # --- Sidebar for Inputs & Settings ---
+    st.sidebar.header("🖼️ Upload Content Image")
+    content_file = st.sidebar.file_uploader("Content Image", type=["jpg", "jpeg", "png"], key="fast_content")
 
-    st.sidebar.header("⚙️ Settings")
-    use_full_size = st.sidebar.checkbox("Use full image size (slower, may fail for large images)", value=True, key="fast_size")
-    resize_info = "Image will be processed at its original resolution." if use_full_size else "Image will be resized to 512x512 for faster processing."
-    st.sidebar.caption(resize_info)
+    st.sidebar.header("🎨 Choose Style")
+    
+    # Style model selection with descriptive names and thumbnail previews
+    style_models = {
+        "starry_night": {"name": "Van Gogh's Starry Night", "description": "Swirling blue and yellow patterns"},
+        "kandinsky": {"name": "Kandinsky Abstract", "description": "Bold geometric patterns and colors"},
+        "scream": {"name": "Munch's The Scream", "description": "Emotional expressionist style"},
+        "gauguin": {"name": "Gauguin's Tahitian Style", "description": "Vibrant post-impressionist tropical scenes"}
+    }
+    
+    selected_style = st.sidebar.selectbox(
+        "Style Model", 
+        list(style_models.keys()),
+        format_func=lambda x: style_models[x]["name"], 
+        key="fast_style_model"
+    )
+    
+    st.sidebar.caption(f"*{style_models[selected_style]['description']}*")
+    
+    # Resolution option
+    st.sidebar.header("⚙️ Transfer Settings")
+    use_full_size = st.sidebar.checkbox(
+        "Use Full Image Resolution", 
+        value=True,
+        help="If unchecked, the image will be resized to 512×512 pixels before applying the style."
+    )
+    
+    resolution_info = "Original size" if use_full_size else "512×512 pixels"
+    st.sidebar.caption(f"*Output resolution: {resolution_info}*")
 
-    # --- Main Area Previews & Results ---
+    # --- Main Area for Previews and Results ---
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Content Image Preview")
-        if fast_content_file:
-            st.image(fast_content_file, use_container_width=True)
+        if content_file:
+            st.image(content_file, use_container_width=True)
         else:
             st.info("Upload a Content Image using the sidebar.")
 
     with col2:
-        st.subheader("Stylized Result (Fast)")
-        # Placeholder for the fast result image display
-        fast_result_placeholder = st.empty()
-        if st.session_state.fast_result_image:
-            fast_result_placeholder.image(st.session_state.fast_result_image, caption="Fast Stylized Result", use_container_width=True)
-        else:
-             fast_result_placeholder.info("Upload a content image and click 'Stylize (Fast)!' in the sidebar.")
+        st.subheader(f"Selected Style: {style_models[selected_style]['name']}")
+        # Here you could add example images for each style
+        # For now, we'll just show a placeholder text
+        st.info(f"This will apply the {style_models[selected_style]['name']} style to your image.")
 
+    st.markdown("--- ")
+    st.subheader("Stylized Result")
 
-    # Stylize Button (Fast)
-    if st.sidebar.button("⚡ Stylize (Fast)!", disabled=(not fast_content_file), use_container_width=True, key="fast_button"):
-        fast_result_placeholder.info("Processing... this should be relatively quick.")
+    # Placeholder for the result image display
+    fast_result_placeholder = st.empty()
+    if st.session_state.fast_result_image:
+        fast_result_placeholder.image(st.session_state.fast_result_image, caption="Fast Style Transfer Result", use_container_width=True)
+    else:
+        fast_result_placeholder.info("Upload a content image and click 'Stylize (Fast)!' in the sidebar.")
+
+    # Stylize Button (only active if content image is uploaded)
+    if st.sidebar.button("⚡ Stylize (Fast)!", disabled=(not content_file), use_container_width=True, key="fast_button"):
+        fast_result_placeholder.info("Processing...")
         st.session_state.fast_result_image = None # Clear previous result
 
-        with st.spinner("Applying fast style transfer..."):
+        with st.spinner(f"Applying {style_models[selected_style]['name']} style..."):
             try:
-                # Prepare the request payload for multipart/form-data
-                files = {'content_image': (fast_content_file.name, fast_content_file.getvalue(), fast_content_file.type)}
-                form_data = {'use_full_size': str(use_full_size)} # FastAPI expects bools as strings in form data
-
-                print(f"Sending request to {FAST_STYLIZE_ENDPOINT} with use_full_size={use_full_size}")
+                # Reset file pointer before reading
+                content_file.seek(0)
                 
-                # Call FastAPI endpoint (no GCS needed)
-                # Use a shorter timeout for fast transfer
-                response = requests.post(FAST_STYLIZE_ENDPOINT, files=files, data=form_data, timeout=120) # 2 minutes timeout
+                # Prepare the form data with the selected model and resolution setting
+                files = {'content_image': ('image.jpg', content_file.getvalue(), content_file.type)}
+                data = {'use_full_size': use_full_size, 'model_name': selected_style}
+                
+                # Call the FastAPI endpoint
+                response = requests.post(
+                    FAST_STYLIZE_ENDPOINT, 
+                    files=files,
+                    data=data,
+                    timeout=120 # 2 minutes should be plenty for fast transfer
+                )
                 response.raise_for_status()
-
-                # Display the returned image directly
-                result_image_bytes = response.content
-                result_image = Image.open(io.BytesIO(result_image_bytes))
-                st.session_state.fast_result_image = result_image # Store in session state
-                fast_result_placeholder.image(result_image, caption="Fast Stylized Result", use_container_width=True)
-                st.sidebar.success("Fast stylization complete!")
-
+                
+                # Convert the response image to PIL
+                result_image = Image.open(io.BytesIO(response.content))
+                
+                # Save to session state and display
+                st.session_state.fast_result_image = result_image
+                fast_result_placeholder.image(
+                    result_image, 
+                    caption=f"Fast Style Transfer Result ({style_models[selected_style]['name']})", 
+                    use_container_width=True
+                )
+                
+                # Success message
+                st.sidebar.success("Style transfer complete!")
+                
             except requests.exceptions.Timeout:
-                 st.error(f"Error: The fast style transfer request timed out after 2 minutes.")
-                 fast_result_placeholder.error("Request Timed Out.")
+                st.error("Error: The request timed out. The server might be overloaded.")
+                fast_result_placeholder.error("Request Timed Out.")
             except requests.exceptions.RequestException as e:
                 st.error(f"Error calling fast style transfer API: {e}")
                 error_detail = "No additional details available."
                 if hasattr(e, 'response') and e.response is not None:
                     try:
-                        # Attempt to get detail from JSON, fall back to text
-                         error_detail = e.response.json().get("detail", e.response.text)
+                        error_detail = e.response.json().get("detail", e.response.text)
                     except:
                         error_detail = e.response.text
                 st.error(f"API Error Detail: {error_detail}")
                 fast_result_placeholder.error("API Request Failed.")
             except Exception as e:
-                st.error(f"An unexpected error occurred during fast stylization: {e}")
+                st.error(f"An unexpected error occurred: {e}")
                 fast_result_placeholder.error("An unexpected error occurred.")
-    else:
-         # Initial message when no button clicked yet
-        if not st.session_state.fast_result_image and fast_content_file:
-            fast_result_placeholder.info("Ready for fast stylization! Click the button in the sidebar.")
-
 
 # --- Footer/Info (Common) ---
 st.sidebar.markdown("--- ")

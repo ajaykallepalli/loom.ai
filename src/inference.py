@@ -37,18 +37,24 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # --- Fast Style Transfer Model Path ---
-# Use absolute path within the container based on Dockerfile COPY instruction
-# Assumes WORKDIR is /app and models are copied to /app/models/
-CONTAINER_MODEL_PATH = "/app/models/starry_night.pth"
+# Map of available model names to their file paths
+MODELS_DIR = "/app/models"
+AVAILABLE_MODELS = {
+    "starry_night": os.path.join(MODELS_DIR, "starry_night.pth"),
+    "kandinsky": os.path.join(MODELS_DIR, "kandinsky_1.pth"),
+    "scream": os.path.join(MODELS_DIR, "scream_1.pth"),
+    "gauguin": os.path.join(MODELS_DIR, "gauguin_1.pth")
+}
 
-# Allow overriding via environment variable for flexibility
-FAST_MODEL_PATH = os.getenv("FAST_MODEL_PATH", CONTAINER_MODEL_PATH)
+# Default model
+DEFAULT_MODEL = "starry_night"
 
-# Add a check at startup to warn if the final path doesn't exist
-if not os.path.exists(FAST_MODEL_PATH):
-     print(f"WARNING: Fast transfer model file not found at the expected path: {FAST_MODEL_PATH}. Endpoint will likely fail.")
-else:
-     print(f"Using Fast Model Path: {FAST_MODEL_PATH}")
+# Add a check at startup to warn if model files don't exist
+for model_name, model_path in AVAILABLE_MODELS.items():
+    if not os.path.exists(model_path):
+        print(f"WARNING: Fast transfer model '{model_name}' not found at the expected path: {model_path}")
+    else:
+        print(f"Found fast transfer model '{model_name}' at {model_path}")
 
 # === Debug File System at Startup ===
 try:
@@ -186,6 +192,7 @@ async def stylize_endpoint(request: StylizeRequest):
 @app.post("/stylize-fast/")
 async def stylize_fast_endpoint(
     use_full_size: bool = Form(True), # Form data to control resizing
+    model_name: str = Form(DEFAULT_MODEL), # Form data to select the style model
     content_image: UploadFile = File(...)
 ):
     """
@@ -193,14 +200,22 @@ async def stylize_fast_endpoint(
     Accepts image file directly.
     Parameters:
       - use_full_size (bool, form data): If True, process at original size. If False, resize to 512x512.
+      - model_name (str, form data): Name of the style model to use (starry_night, kandinsky, scream, gauguin).
       - content_image (UploadFile): The image file to stylize.
     Returns:
       - Image response (JPEG format).
     """
-    print(f"Received fast stylize request: use_full_size={use_full_size}, filename='{content_image.filename}'")
+    print(f"Received fast stylize request: use_full_size={use_full_size}, model_name='{model_name}', filename='{content_image.filename}'")
     
     if not content_image.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image.")
+
+    if model_name not in AVAILABLE_MODELS:
+        raise HTTPException(status_code=400, detail=f"Invalid model name. Available models: {list(AVAILABLE_MODELS.keys())}")
+    
+    model_path = AVAILABLE_MODELS[model_name]
+    if not os.path.exists(model_path):
+        raise HTTPException(status_code=500, detail=f"Model '{model_name}' not found on server.")
 
     try:
         # Read image contents into memory
@@ -215,7 +230,7 @@ async def stylize_fast_endpoint(
 
         # Perform fast style transfer
         stylized_image_pil = run_fast_style_transfer(
-            model_path=FAST_MODEL_PATH,
+            model_path=model_path,
             content_image_pil=pil_image,
             use_full_size=use_full_size,
             resize_dim=512 # Fixed resize dim if use_full_size is False
@@ -232,7 +247,7 @@ async def stylize_fast_endpoint(
         return StreamingResponse(img_byte_arr, media_type="image/jpeg")
 
     except FileNotFoundError:
-        print(f"Error: Fast transfer model file not found at {FAST_MODEL_PATH}")
+        print(f"Error: Fast transfer model file not found at {model_path}")
         raise HTTPException(status_code=500, detail=f"Fast transfer model not configured or found on server.")
     except Exception as e:
         print(f"Error during fast stylization: {e}")
