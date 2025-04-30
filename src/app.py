@@ -23,6 +23,7 @@ RESULT_BUCKET_NAME = "stylized-results-style-transfer-lab" # For downloading res
 FASTAPI_URL = "https://nst-fastapi-service-965013218383.us-central1.run.app" # Deployed URL
 # FASTAPI_URL = "http://localhost:8080" # Use this for local testing
 STYLIZE_ENDPOINT = f"{FASTAPI_URL}/stylize/"
+FAST_STYLIZE_ENDPOINT = f"{FASTAPI_URL}/stylize-fast/" # New endpoint
 
 # --- GCS Client (Cached) ---
 # Cache the client initialization for efficiency
@@ -89,152 +90,254 @@ st.title("🎨 Loom.AI Neural Style Transfer")
 st.markdown("Transform your images with the artistic styles of famous paintings.")
 st.markdown("--- ")
 
-# --- Sidebar for Inputs & Settings ---
-st.sidebar.header("🖼️ Upload Images")
-content_file = st.sidebar.file_uploader("1. Content Image", type=["jpg", "jpeg", "png"])
-style_file = st.sidebar.file_uploader("2. Style Image", type=["jpg", "jpeg", "png"])
-
-st.sidebar.header("⚙️ Style Transfer Settings")
-
-# Resolution Selection
-resolution_option = st.sidebar.radio(
-    "Output Resolution",
-    ('Low (512px - Faster)', 'High (800px - Slower)'),
-    index=0, # Default to Low
-    help="High resolution takes significantly longer and uses the result of the low-res pass as a starting point."
+# === Option Selection ===
+transfer_mode = st.sidebar.selectbox(
+    "Choose Transfer Mode",
+    ("Neural Style Transfer (Slow, Custom Style)", "Fast Style Transfer (Pre-trained Style)")
 )
-resolution_key = 'high' if resolution_option.startswith('High') else 'low'
+st.sidebar.markdown("--- ")
 
-# Iterations Sliders
-st.sidebar.markdown("**Optimization Iterations**")
-iterations = st.sidebar.slider(
-    "Low-Res Iterations", 
-    min_value=50, 
-    max_value=1000, 
-    value=300, # Default from backend
-    step=50, 
-    help="More iterations generally improve quality but increase processing time."
-)
+# Initialize session state for results
+if 'slow_result_image' not in st.session_state:
+    st.session_state.slow_result_image = None
+if 'fast_result_image' not in st.session_state:
+    st.session_state.fast_result_image = None
 
-iterations_hr_disabled = (resolution_key == 'low')
-iterations_hr = st.sidebar.slider(
-    "High-Res Iterations (if High selected)", 
-    min_value=50, 
-    max_value=500, 
-    value=200, # Default from backend
-    step=50, 
-    disabled=iterations_hr_disabled,
-    help="Only applicable when High resolution is selected."
-)
+# =======================================
+# ===== Neural Style Transfer (Slow) ====
+# =======================================
+if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
+    st.header("🖌️ Neural Style Transfer (Custom Style)")
+    st.markdown("Upload a content image and a style image. The style will be transferred to the content.")
 
-# --- Main Area for Previews and Results ---
-col1, col2 = st.columns(2)
+    # --- Sidebar for Inputs & Settings ---
+    st.sidebar.header("🖼️ Upload Images")
+    content_file = st.sidebar.file_uploader("1. Content Image", type=["jpg", "jpeg", "png"], key="slow_content")
+    style_file = st.sidebar.file_uploader("2. Style Image", type=["jpg", "jpeg", "png"], key="slow_style")
 
-with col1:
-    st.subheader("Content Image Preview")
-    if content_file:
-        st.image(content_file, use_container_width=True)
+    st.sidebar.header("⚙️ Style Transfer Settings")
+    # Resolution Selection
+    resolution_option = st.sidebar.radio(
+        "Output Resolution",
+        ('Low (512px - Faster)', 'High (800px - Slower)'),
+        index=0, # Default to Low
+        help="High resolution takes significantly longer and uses the result of the low-res pass as a starting point.",
+        key="slow_resolution"
+    )
+    resolution_key = 'high' if resolution_option.startswith('High') else 'low'
+
+    # Iterations Sliders
+    st.sidebar.markdown("**Optimization Iterations**")
+    iterations = st.sidebar.slider(
+        "Low-Res Iterations",
+        min_value=50,
+        max_value=1000,
+        value=300, # Default from backend
+        step=50,
+        help="More iterations generally improve quality but increase processing time.",
+        key="slow_iterations"
+    )
+
+    iterations_hr_disabled = (resolution_key == 'low')
+    iterations_hr = st.sidebar.slider(
+        "High-Res Iterations (if High selected)",
+        min_value=50,
+        max_value=500,
+        value=200, # Default from backend
+        step=50,
+        disabled=iterations_hr_disabled,
+        help="Only applicable when High resolution is selected.",
+        key="slow_iterations_hr"
+    )
+
+    # --- Main Area for Previews and Results ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Content Image Preview")
+        if content_file:
+            st.image(content_file, use_container_width=True)
+        else:
+            st.info("Upload a Content Image using the sidebar.")
+
+    with col2:
+        st.subheader("Style Image Preview")
+        if style_file:
+            st.image(style_file, use_container_width=True)
+        else:
+            st.info("Upload a Style Image using the sidebar.")
+
+    st.markdown("--- ")
+    st.subheader("Stylized Result")
+
+    # Placeholder for the result image display
+    result_placeholder = st.empty()
+    if st.session_state.slow_result_image:
+        result_placeholder.image(st.session_state.slow_result_image, caption="Stylized Result", use_container_width=True)
     else:
-        st.info("Upload a Content Image using the sidebar.")
+        result_placeholder.info("Upload content and style images and click 'Stylize!' in the sidebar.")
 
-with col2:
-    st.subheader("Style Image Preview")
-    if style_file:
-        st.image(style_file, use_container_width=True)
-    else:
-        st.info("Upload a Style Image using the sidebar.")
+    # Stylize Button (only active if both images are uploaded)
+    if st.sidebar.button("✨ Stylize!", disabled=(not content_file or not style_file), use_container_width=True, key="slow_button"):
+        result_placeholder.info("Processing... this may take several minutes depending on settings.")
+        st.session_state.slow_result_image = None # Clear previous result
 
-st.markdown("--- ")
-st.subheader("Stylized Result")
+        with st.spinner(f"Processing with {resolution_option} output..."):
+            # 1. Upload images to GCS (only if storage client is available)
+            user_id = "streamlit_user"
+            content_gcs_uri = None
+            style_gcs_uri = None
+            if storage_client:
+                 content_gcs_uri = save_to_gcs(content_file, USER_UPLOADS_BUCKET, user_id)
+                 style_gcs_uri = save_to_gcs(style_file, STYLE_IMAGES_BUCKET, user_id)
+            
+            if content_gcs_uri and style_gcs_uri:
+                st.sidebar.success("Images uploaded to GCS.")
+                st.sidebar.caption(f"Content: `{content_gcs_uri}`")
+                st.sidebar.caption(f"Style: `{style_gcs_uri}`")
 
-# Placeholder for the result image display
-result_placeholder = st.empty()
+                # 2. Call FastAPI endpoint
+                try:
+                    payload = {
+                        "content_image_uri": content_gcs_uri,
+                        "style_image_uri": style_gcs_uri,
+                        "resolution": resolution_key,
+                        "iterations": iterations,
+                        "iterations_hr": iterations_hr
+                    }
+                    print(f"Sending request to {STYLIZE_ENDPOINT} with payload: {payload}")
+                    
+                    # Increase timeout significantly for potentially long GPU tasks
+                    response = requests.post(STYLIZE_ENDPOINT, json=payload, timeout=900) # 15 minutes timeout
+                    response.raise_for_status()
 
-# Stylize Button (only active if both images are uploaded)
-if st.sidebar.button("✨ Stylize!", disabled=(not content_file or not style_file), use_container_width=True):
-    result_placeholder.info("Processing... this may take several minutes depending on settings.")
-    
-    with st.spinner(f"Processing with {resolution_option} output..."):
-        # 1. Upload images to GCS (only if storage client is available)
-        user_id = "streamlit_user"
-        content_gcs_uri = None
-        style_gcs_uri = None
-        if storage_client:
-             content_gcs_uri = save_to_gcs(content_file, USER_UPLOADS_BUCKET, user_id)
-             style_gcs_uri = save_to_gcs(style_file, STYLE_IMAGES_BUCKET, user_id)
-        
-        if content_gcs_uri and style_gcs_uri:
-            st.sidebar.success("Images uploaded to GCS.")
-            st.sidebar.caption(f"Content: `{content_gcs_uri}`")
-            st.sidebar.caption(f"Style: `{style_gcs_uri}`")
+                    result_data = response.json()
+                    result_gcs_uri = result_data.get("result_image_uri")
+                    st.sidebar.success("Stylization complete!")
+                    st.sidebar.caption(f"Result: `{result_gcs_uri}`")
 
-            # 2. Call FastAPI endpoint
-            try:
-                payload = {
-                    "content_image_uri": content_gcs_uri,
-                    "style_image_uri": style_gcs_uri,
-                    "resolution": resolution_key,
-                    "iterations": iterations,
-                    "iterations_hr": iterations_hr
-                }
-                print(f"Sending request to {STYLIZE_ENDPOINT} with payload: {payload}")
-                
-                # Increase timeout significantly for potentially long GPU tasks
-                response = requests.post(STYLIZE_ENDPOINT, json=payload, timeout=900) # 15 minutes timeout
-                response.raise_for_status() 
-
-                result_data = response.json()
-                result_gcs_uri = result_data.get("result_image_uri")
-                st.sidebar.success("Stylization complete!")
-                st.sidebar.caption(f"Result: `{result_gcs_uri}`")
-
-                # 3. Download and display result from GCS
-                if result_gcs_uri:
-                    # Pass storage_client explicitly to cached function
-                    result_image = download_image_from_gcs(storage_client, result_gcs_uri)
-                    if result_image:
-                        result_placeholder.image(result_image, caption=f"Stylized Result ({resolution_option})", use_container_width=True)
+                    # 3. Download and display result from GCS
+                    if result_gcs_uri:
+                        # Pass storage_client explicitly to cached function
+                        result_image = download_image_from_gcs(storage_client, result_gcs_uri)
+                        if result_image:
+                            st.session_state.slow_result_image = result_image # Store in session state
+                            result_placeholder.image(result_image, caption=f"Stylized Result ({resolution_option})", use_container_width=True)
+                        else:
+                            result_placeholder.error("Failed to download the result image from GCS.")
                     else:
-                        result_placeholder.error("Failed to download the result image from GCS.")
-                else:
-                    result_placeholder.error("Stylization request succeeded, but no result URI was returned.")
+                        result_placeholder.error("Stylization request succeeded, but no result URI was returned.")
+
+                except requests.exceptions.Timeout:
+                     st.error(f"Error: The request timed out after 15 minutes. The process might be taking too long for the selected settings, or the backend service might be unavailable.")
+                     result_placeholder.error("Request Timed Out.")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Error calling style transfer API: {e}")
+                    error_detail = "No additional details available."
+                    if hasattr(e, 'response') and e.response is not None:
+                        try:
+                            error_detail = e.response.json().get("detail", e.response.text)
+                        except:
+                            error_detail = e.response.text
+                    st.error(f"API Error Detail: {error_detail}")
+                    result_placeholder.error("API Request Failed.")
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {e}")
+                    result_placeholder.error("An unexpected error occurred.")
+            else:
+                st.error("Failed to upload one or both images to GCS. Cannot proceed.")
+                result_placeholder.warning("Image upload failed.")
+    else:
+        # Initial message when no button clicked yet
+        if not st.session_state.slow_result_image and content_file and style_file:
+            result_placeholder.info("Ready to stylize! Click the button in the sidebar.")
+
+# =======================================
+# ===== Fast Style Transfer         =====
+# =======================================
+elif transfer_mode == "Fast Style Transfer (Pre-trained Style)":
+    st.header("⚡ Fast Style Transfer (Starry Night Style)")
+    st.markdown("Upload a content image. It will be stylized using a pre-trained model (Starry Night style).")
+
+    # --- Sidebar Inputs ---
+    st.sidebar.header("🖼️ Upload Image")
+    fast_content_file = st.sidebar.file_uploader("Content Image", type=["jpg", "jpeg", "png"], key="fast_content")
+
+    st.sidebar.header("⚙️ Settings")
+    use_full_size = st.sidebar.checkbox("Use full image size (slower, may fail for large images)", value=True, key="fast_size")
+    resize_info = "Image will be processed at its original resolution." if use_full_size else "Image will be resized to 512x512 for faster processing."
+    st.sidebar.caption(resize_info)
+
+    # --- Main Area Previews & Results ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Content Image Preview")
+        if fast_content_file:
+            st.image(fast_content_file, use_container_width=True)
+        else:
+            st.info("Upload a Content Image using the sidebar.")
+
+    with col2:
+        st.subheader("Stylized Result (Fast)")
+        # Placeholder for the fast result image display
+        fast_result_placeholder = st.empty()
+        if st.session_state.fast_result_image:
+            fast_result_placeholder.image(st.session_state.fast_result_image, caption="Fast Stylized Result", use_container_width=True)
+        else:
+             fast_result_placeholder.info("Upload a content image and click 'Stylize (Fast)!' in the sidebar.")
+
+
+    # Stylize Button (Fast)
+    if st.sidebar.button("⚡ Stylize (Fast)!", disabled=(not fast_content_file), use_container_width=True, key="fast_button"):
+        fast_result_placeholder.info("Processing... this should be relatively quick.")
+        st.session_state.fast_result_image = None # Clear previous result
+
+        with st.spinner("Applying fast style transfer..."):
+            try:
+                # Prepare the request payload for multipart/form-data
+                files = {'content_image': (fast_content_file.name, fast_content_file.getvalue(), fast_content_file.type)}
+                form_data = {'use_full_size': str(use_full_size)} # FastAPI expects bools as strings in form data
+
+                print(f"Sending request to {FAST_STYLIZE_ENDPOINT} with use_full_size={use_full_size}")
+                
+                # Call FastAPI endpoint (no GCS needed)
+                # Use a shorter timeout for fast transfer
+                response = requests.post(FAST_STYLIZE_ENDPOINT, files=files, data=form_data, timeout=120) # 2 minutes timeout
+                response.raise_for_status()
+
+                # Display the returned image directly
+                result_image_bytes = response.content
+                result_image = Image.open(io.BytesIO(result_image_bytes))
+                st.session_state.fast_result_image = result_image # Store in session state
+                fast_result_placeholder.image(result_image, caption="Fast Stylized Result", use_container_width=True)
+                st.sidebar.success("Fast stylization complete!")
 
             except requests.exceptions.Timeout:
-                 st.error(f"Error: The request timed out after 15 minutes. The process might be taking too long for the selected settings, or the backend service might be unavailable.")
-                 result_placeholder.error("Request Timed Out.")
+                 st.error(f"Error: The fast style transfer request timed out after 2 minutes.")
+                 fast_result_placeholder.error("Request Timed Out.")
             except requests.exceptions.RequestException as e:
-                st.error(f"Error calling style transfer API: {e}")
+                st.error(f"Error calling fast style transfer API: {e}")
                 error_detail = "No additional details available."
                 if hasattr(e, 'response') and e.response is not None:
-                    try: 
-                        error_detail = e.response.json().get("detail", e.response.text)
+                    try:
+                        # Attempt to get detail from JSON, fall back to text
+                         error_detail = e.response.json().get("detail", e.response.text)
                     except:
                         error_detail = e.response.text
                 st.error(f"API Error Detail: {error_detail}")
-                result_placeholder.error("API Request Failed.")
+                fast_result_placeholder.error("API Request Failed.")
             except Exception as e:
-                st.error(f"An unexpected error occurred: {e}")
-                result_placeholder.error("An unexpected error occurred.")
-        else:
-            st.error("Failed to upload one or both images to GCS. Cannot proceed.")
-            result_placeholder.warning("Image upload failed.")
-else:
-    # Initial message when no button clicked yet
-    if content_file and style_file:
-        result_placeholder.info("Ready to stylize! Click the button in the sidebar.")
+                st.error(f"An unexpected error occurred during fast stylization: {e}")
+                fast_result_placeholder.error("An unexpected error occurred.")
     else:
-        result_placeholder.info("Upload content and style images using the sidebar to enable the 'Stylize!' button.")
+         # Initial message when no button clicked yet
+        if not st.session_state.fast_result_image and fast_content_file:
+            fast_result_placeholder.info("Ready for fast stylization! Click the button in the sidebar.")
 
-# Footer/Info
+
+# --- Footer/Info (Common) ---
 st.sidebar.markdown("--- ")
 st.sidebar.caption(f"Backend: {FASTAPI_URL}")
-st.sidebar.caption(f"GCS User Uploads: {USER_UPLOADS_BUCKET}")
-
-# Add instructions or descriptions
-st.sidebar.markdown("## How to Use")
-st.sidebar.markdown("1. Upload a **Content Image**.")
-st.sidebar.markdown("2. Upload a **Style Image**.")
-st.sidebar.markdown("3. Click **Stylize!**")
-st.sidebar.markdown("4. Wait for the result to appear.")
+if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
+    st.sidebar.caption(f"GCS User Uploads: {USER_UPLOADS_BUCKET}")
 st.sidebar.markdown("--- ")
-st.sidebar.markdown("**Note:** This is an MVP. Ensure the FastAPI backend is running and accessible.") 
+st.sidebar.markdown("**Note:** Ensure the FastAPI backend is running and accessible.") 

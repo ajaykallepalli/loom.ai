@@ -27,6 +27,9 @@ RUN pip install -r requirements.txt
 # This includes inference.py, style_transfer.py, and app.py
 COPY src/ /app/src/
 
+# Copy the pre-trained models
+COPY models/ /app/models/
+
 # Make port 8080 available to the world outside this container
 EXPOSE 8080
 

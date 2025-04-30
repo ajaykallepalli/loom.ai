@@ -1,14 +1,17 @@
 import io
 import uuid
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import JSONResponse
+import os # Added for model path
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from PIL import Image
 from google.cloud import storage
 import torch
 from pydantic import BaseModel, Field # Import Field for validation/defaults
+import logging # Added for debug listing
 
 # Use relative import because both files are in the 'src' directory/package
-from .style_transfer import run_style_transfer # Correct function name
+from .style_transfer import run_style_transfer # Original slow transfer
+from .fast_transfer import run_fast_style_transfer, TransformerNet # New fast transfer
 
 app = FastAPI()
 
@@ -22,17 +25,44 @@ class StylizeRequest(BaseModel):
     iterations_hr: int = Field(default=200, gt=0, le=500) # Positive integer, max 500
 
 # --- Configuration ---
-# TODO: Replace with your actual bucket names
 # Make sure the Service Account running this has access
 CONTENT_BUCKET_NAME = "user-uploads-style-transfer-lab" # Bucket for user-uploaded content images
 STYLE_BUCKET_NAME = "style-images-style-transfer-lab"   # Bucket for style images (can be public)
 RESULT_BUCKET_NAME = "stylized-results-style-transfer-lab" # Bucket to store results
 
-# --- Model Loading ---
+# --- Model Loading (Slow Style Transfer) ---
 # The style_transfer module now loads the VGG model internally
-# We just need to ensure the device is set correctly
+# We just need to ensure the device is set correctly for both
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
+
+# --- Fast Style Transfer Model Path ---
+# Use absolute path within the container based on Dockerfile COPY instruction
+# Assumes WORKDIR is /app and models are copied to /app/models/
+CONTAINER_MODEL_PATH = "/app/models/starry_night.pth"
+
+# Allow overriding via environment variable for flexibility
+FAST_MODEL_PATH = os.getenv("FAST_MODEL_PATH", CONTAINER_MODEL_PATH)
+
+# Add a check at startup to warn if the final path doesn't exist
+if not os.path.exists(FAST_MODEL_PATH):
+     print(f"WARNING: Fast transfer model file not found at the expected path: {FAST_MODEL_PATH}. Endpoint will likely fail.")
+else:
+     print(f"Using Fast Model Path: {FAST_MODEL_PATH}")
+
+# === Debug File System at Startup ===
+try:
+    app_root_contents = os.listdir('/app')
+    print(f"DEBUG: Contents of /app: {app_root_contents}")
+except Exception as e:
+    print(f"DEBUG: Error listing /app: {e}")
+
+try:
+    app_models_contents = os.listdir('/app/models')
+    print(f"DEBUG: Contents of /app/models: {app_models_contents}")
+except Exception as e:
+    print(f"DEBUG: Error listing /app/models: {e}")
+# ===================================
 
 # --- Google Cloud Storage Client ---
 # Initialized lazily or globally if preferred
@@ -88,6 +118,7 @@ def upload_image_to_gcs(image: Image.Image, bucket_name: str, blob_name: str) ->
         raise HTTPException(status_code=500, detail=f"Failed to upload result image.")
 
 
+# === Endpoint for Original (Slow) Style Transfer ===
 @app.post("/stylize/")
 async def stylize_endpoint(request: StylizeRequest):
     """
@@ -151,6 +182,64 @@ async def stylize_endpoint(request: StylizeRequest):
         raise HTTPException(status_code=500, detail=f"Internal server error during stylization: {str(e)}")
 
 
+# === Endpoint for Fast Style Transfer ===
+@app.post("/stylize-fast/")
+async def stylize_fast_endpoint(
+    use_full_size: bool = Form(True), # Form data to control resizing
+    content_image: UploadFile = File(...)
+):
+    """
+    Applies fast style transfer using the pre-trained TransformerNet model.
+    Accepts image file directly.
+    Parameters:
+      - use_full_size (bool, form data): If True, process at original size. If False, resize to 512x512.
+      - content_image (UploadFile): The image file to stylize.
+    Returns:
+      - Image response (JPEG format).
+    """
+    print(f"Received fast stylize request: use_full_size={use_full_size}, filename='{content_image.filename}'")
+    
+    if not content_image.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image.")
+
+    try:
+        # Read image contents into memory
+        contents = await content_image.read()
+        pil_image = Image.open(io.BytesIO(contents))
+
+        # Ensure image is RGB
+        if pil_image.mode != 'RGB':
+             pil_image = pil_image.convert('RGB')
+
+        print(f"Input image size: {pil_image.size}")
+
+        # Perform fast style transfer
+        stylized_image_pil = run_fast_style_transfer(
+            model_path=FAST_MODEL_PATH,
+            content_image_pil=pil_image,
+            use_full_size=use_full_size,
+            resize_dim=512 # Fixed resize dim if use_full_size is False
+        )
+        
+        print(f"Output stylized image size: {stylized_image_pil.size}")
+
+        # Save the stylized image to a bytes buffer
+        img_byte_arr = io.BytesIO()
+        stylized_image_pil.save(img_byte_arr, format='JPEG')
+        img_byte_arr.seek(0)
+
+        # Return the image bytes directly in the response
+        return StreamingResponse(img_byte_arr, media_type="image/jpeg")
+
+    except FileNotFoundError:
+        print(f"Error: Fast transfer model file not found at {FAST_MODEL_PATH}")
+        raise HTTPException(status_code=500, detail=f"Fast transfer model not configured or found on server.")
+    except Exception as e:
+        print(f"Error during fast stylization: {e}")
+        import traceback; traceback.print_exc();
+        raise HTTPException(status_code=500, detail=f"Internal server error during fast stylization: {str(e)}")
+
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
@@ -168,6 +257,7 @@ async def health_check():
 if __name__ == "__main__":
     # Need to adjust how this runs locally due to relative import
     # Typically run via `python -m src.inference` from the root directory
+    print(f"Using Fast Model Path: {os.path.abspath(FAST_MODEL_PATH)}") # Show path on startup
     print("To run locally, execute from the project root: python -m uvicorn src.inference:app --reload --host 0.0.0.0 --port 8080")
     # The Dockerfile CMD handles running it correctly in the container.
     pass 

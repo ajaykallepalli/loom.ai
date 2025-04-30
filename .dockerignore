@@ -1,0 +1,20 @@
+# Version Control
+.git
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Virtual Env
+env/
+venv/
+ENV/
+.env 
