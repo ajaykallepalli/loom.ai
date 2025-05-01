@@ -195,8 +195,6 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
             
             if content_gcs_uri and style_gcs_uri:
                 st.sidebar.success("Images uploaded to GCS.")
-                st.sidebar.caption(f"Content: `{content_gcs_uri}`")
-                st.sidebar.caption(f"Style: `{style_gcs_uri}`")
 
                 # 2. Call FastAPI endpoint
                 try:
@@ -220,7 +218,6 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
                     result_data = response.json()
                     result_gcs_uri = result_data.get("result_image_uri")
                     st.sidebar.success("Stylization complete!")
-                    st.sidebar.caption(f"Result: `{result_gcs_uri}`")
 
                     # 3. Download and display result from GCS
                     if result_gcs_uri:
@@ -392,7 +389,5 @@ else:  # Fast Transfer
 # --- Footer/Info (Common) ---
 st.sidebar.markdown("--- ")
 st.sidebar.caption(f"Backend: {FASTAPI_URL}")
-if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
-    st.sidebar.caption(f"GCS User Uploads: {USER_UPLOADS_BUCKET}")
 st.sidebar.markdown("--- ")
 st.sidebar.markdown("**Note:** Ensure the FastAPI backend is running and accessible.") 
