@@ -315,7 +315,10 @@ else:  # Fast Transfer
     with col2:
         st.subheader("Style Preview")
         # Load and display the style image from the style_images directory
-        style_image_path = f"style_images/{style_model}.jpg"
+        style_filename = style_model
+        if style_model in ["scream", "gauguin", "kandinsky"]:
+            style_filename = f"{style_model}_1"
+        style_image_path = f"images/{style_filename}.jpg"
         try:
             style_preview = Image.open(style_image_path)
             st.image(style_preview, caption=f"Style: {style_model}", use_container_width=True)
