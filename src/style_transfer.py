@@ -181,6 +181,8 @@ def run_style_transfer(
     max_iter=300,
     max_iter_hr=200,
     show_iter=50,
+    style_weight=1e10,
+    content_weight=1e5,
 ):
     """
     Performs Neural Style Transfer using the LBFGS optimization method.
@@ -192,13 +194,15 @@ def run_style_transfer(
         max_iter (int): Max optimization iterations for low-res pass.
         max_iter_hr (int): Max optimization iterations for high-res pass.
         show_iter (int): Print interval (not used in server context).
+        style_weight (float): Overall weight for style loss. Higher values emphasize style. Default 1e10.
+        content_weight (float): Overall weight for content loss. Higher values preserve content. Default 1e5.
 
     Returns:
         tuple: (out_img_lr, out_img_hr)
                out_img_lr (PIL.Image): Stylized low-resolution image.
                out_img_hr (PIL.Image or None): Stylized high-resolution image (if resolution='high'), else None.
     """
-    print(f"Running style transfer with resolution: {resolution}")
+    print(f"Running style transfer with resolution: {resolution}, style_weight: {style_weight}, content_weight: {content_weight}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -226,8 +230,10 @@ def run_style_transfer(
     ] * len(content_layers)
 
     # Weights for style and content losses (tunable hyperparameters)
-    style_weights = [1e3 / n**2 for n in [64, 128, 256, 512, 512]]  # Original weights
-    content_weights = [1e0]  # Original weight
+    # Apply the overall style_weight to each style layer weight
+    style_weights = [style_weight * 1e3 / n**2 for n in [64, 128, 256, 512, 512]]
+    # Apply the content_weight to the content layer weight
+    content_weights = [content_weight]
     weights = style_weights + content_weights
 
     # Compute target features/Gram matrices (once per image)
@@ -321,13 +327,15 @@ def run_style_transfer(
     return out_img_lr, out_img_hr
 
 
-def run_style_transfer_single(content_img, style_img, resolution="low", max_iter=300):
+def run_style_transfer_single(content_img, style_img, resolution="low", max_iter=300, style_weight=1e10, content_weight=1e5):
     """Simplified interface that returns only the requested resolution image."""
     out_img_lr, out_img_hr = run_style_transfer(
         content_img=content_img,
         style_img=style_img,
         resolution=resolution,
         max_iter=max_iter,
+        style_weight=style_weight,
+        content_weight=content_weight,
     )
 
     # Return only the requested resolution image

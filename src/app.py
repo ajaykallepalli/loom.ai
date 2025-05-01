@@ -152,6 +152,24 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
         help="Only applicable when High resolution is selected.",
         key="slow_iterations_hr"
     )
+    
+    # Style Strength Slider
+    st.sidebar.markdown("**Style Strength**")
+    style_weight = st.sidebar.slider(
+        "Style Weight",
+        min_value=1,
+        max_value=100,
+        value=10,  # Default value
+        step=1,
+        help="Higher values make the result look more like the style image. Lower values preserve more of the content image.",
+        key="style_weight"
+    )
+    # Calculate the actual style weight (exponential scale)
+    style_weight_value = 10 ** style_weight
+    content_weight_value = 1e5  # Fixed content weight
+    
+    # Display the style/content balance
+    st.sidebar.caption(f"Style/Content Balance: {style_weight}%")
 
     # --- Main Area for Previews and Results ---
     col1, col2 = st.columns(2)
@@ -203,7 +221,9 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
                         "style_image_uri": style_gcs_uri,
                         "resolution": resolution_key,
                         "iterations": iterations,
-                        "iterations_hr": iterations_hr
+                        "iterations_hr": iterations_hr,
+                        "style_weight": style_weight_value,
+                        "content_weight": content_weight_value
                     }
                     print(f"Sending request to {STYLIZE_ENDPOINT} with payload: {payload}")
                     
