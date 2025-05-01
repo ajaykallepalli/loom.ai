@@ -23,6 +23,9 @@ class StylizeRequest(BaseModel):
     resolution: str = Field(default='low', pattern="^(low|high)$")  # Only allow 'low' or 'high'
     iterations: int = Field(default=300, gt=0, le=1000)  # Positive integer, max 1000
     iterations_hr: int = Field(default=200, gt=0, le=500)  # Positive integer, max 500
+    # Add style and content weight parameters
+    style_weight: float = Field(default=1e10, gt=0)  # Positive float, default 1e10
+    content_weight: float = Field(default=1e5, gt=0)  # Positive float, default 1e5
 
 
 # --- Configuration ---
@@ -138,10 +141,13 @@ async def stylize_endpoint(request: StylizeRequest):
       - resolution (str, optional): Output resolution ('low' or 'high'). Defaults to 'low'.
       - iterations (int, optional): Max iterations for low-res pass. Defaults to 300.
       - iterations_hr (int, optional): Max iterations for high-res pass. Defaults to 200.
+      - style_weight (float, optional): Weight for style loss. Higher values emphasize style over content. Defaults to 1e10.
+      - content_weight (float, optional): Weight for content loss. Higher values preserve more content. Defaults to 1e5.
     """
     print(f"Received request: content='{request.content_image_uri}', style='{request.style_image_uri}', "
           f"resolution='{request.resolution}', iterations={request.iterations}, "
-          f"iterations_hr={request.iterations_hr}")
+          f"iterations_hr={request.iterations_hr}, style_weight={request.style_weight}, "
+          f"content_weight={request.content_weight}")
     
     try:
         # Parse GCS URIs from the request model
@@ -165,7 +171,9 @@ async def stylize_endpoint(request: StylizeRequest):
             style_img=style_image, 
             resolution=request.resolution,
             max_iter=request.iterations,
-            max_iter_hr=request.iterations_hr
+            max_iter_hr=request.iterations_hr,
+            style_weight=request.style_weight,
+            content_weight=request.content_weight
         )
         
         # Determine which image to upload based on requested resolution
