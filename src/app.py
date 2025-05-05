@@ -332,11 +332,15 @@ else:  # Fast Transfer
 
     with col2:
         st.subheader("Style Preview")
-        # Load and display the style image from the style_images directory
-        style_filename = style_model
-        if style_model in ["scream", "gauguin", "kandinsky"]:
-            style_filename = f"{style_model}_1"
-        style_image_path = f"images/{style_filename}.jpg"
+        # Map style model to correct image filename
+        style_image_map = {
+            "starry_night": "starry_night.jpg",
+            "kandinsky": "kandinsky_1.jpg",
+            "scream": "scream_1.jpg",
+            "gauguin": "gauguin_1.jpg",
+            "ed_hopper": "Nighthawks_EdwardHopper.jpg"
+        }
+        style_image_path = f"images/{style_image_map.get(style_model, style_model + '.jpg')}"
         try:
             style_preview = Image.open(style_image_path)
             st.image(style_preview, caption=f"Style: {style_model}", use_container_width=True)
