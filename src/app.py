@@ -4,6 +4,7 @@ import requests
 import uuid
 from PIL import Image
 import io
+from google.oauth2 import service_account
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -30,9 +31,24 @@ FAST_STYLIZE_ENDPOINT = f"{FASTAPI_URL}/stylize-fast/"  # New endpoint
 @st.cache_resource
 def get_storage_client():
     try:
-        client = storage.Client()
-        print("Initialized GCS Client")
-        return client
+        # Check if we have GCP credentials in Streamlit secrets
+        if 'gcp_service_account' in st.secrets:
+            # For deployed app - use secrets
+            credentials_dict = st.secrets["gcp_service_account"]
+            credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+            client = storage.Client(credentials=credentials)
+            print("Initialized GCS Client with service account credentials from secrets")
+            return client
+        else:
+            # For local development - try Application Default Credentials
+            try:
+                client = storage.Client()
+                print("Initialized GCS Client with Application Default Credentials")
+                return client
+            except Exception as e:
+                st.error(f"Failed to initialize Google Cloud Storage client: {e}")
+                st.error("Ensure Application Default Credentials (ADC) are configured or Service Account has permissions.")
+                return None
     except Exception as e:
         st.error(f"Failed to initialize Google Cloud Storage client: {e}")
         st.error("Ensure Application Default Credentials (ADC) are configured or Service Account has permissions.")

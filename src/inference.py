@@ -5,6 +5,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image
 from google.cloud import storage
+from google.oauth2 import service_account
 import torch
 from pydantic import BaseModel, Field  # Import Field for validation/defaults
 
@@ -85,7 +86,22 @@ storage_client = None
 def get_storage_client():
     global storage_client
     if storage_client is None:
-        storage_client = storage.Client()
+        try:
+            # Check if credentials file exists (for Cloud Run or other deployment)
+            if os.path.exists('/secrets/gcp-credentials.json'):
+                # Use explicit service account file
+                credentials = service_account.Credentials.from_service_account_file(
+                    '/secrets/gcp-credentials.json')
+                storage_client = storage.Client(credentials=credentials)
+                print("Initialized GCS Client with service account file credentials")
+            else:
+                # Fall back to Application Default Credentials
+                storage_client = storage.Client()
+                print("Initialized GCS Client with Application Default Credentials")
+        except Exception as e:
+            print(f"Failed to initialize Google Cloud Storage client: {e}")
+            print("Ensure Application Default Credentials (ADC) are configured or Service Account has permissions.")
+            raise HTTPException(status_code=500, detail=f"Failed to initialize Google Cloud Storage: {str(e)}")
     return storage_client
 
 
