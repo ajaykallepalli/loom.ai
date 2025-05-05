@@ -290,13 +290,14 @@ else:  # Fast Transfer
     # Style Model Selection
     style_model = st.sidebar.selectbox(
         "Select Style",
-        options=["starry_night", "kandinsky", "scream", "gauguin"],
+        options=["starry_night", "kandinsky", "scream", "gauguin", "ed_hopper"],
         index=0,  # Default to starry_night
         format_func=lambda x: {
             "starry_night": "🌠 Starry Night (Van Gogh)",
             "kandinsky": "🎨 Composition (Kandinsky)",
             "scream": "😱 The Scream (Munch)",
-            "gauguin": "🏝️ Tahitian (Gauguin)"
+            "gauguin": "🏝️ Tahitian (Gauguin)",
+            "ed_hopper": "🏙️ Nighthawks (Hopper)"
         }.get(x, x),
         key="fast_style_model"
     )

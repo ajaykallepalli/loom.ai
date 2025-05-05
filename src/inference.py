@@ -42,12 +42,13 @@ print(f"Using device: {device}")
 
 # --- Fast Style Transfer Model Path ---
 # Map of available model names to their file paths
-MODELS_DIR = "/app/models"
+MODELS_DIR = "models"  # Changed from /app/models to local models directory
 AVAILABLE_MODELS = {
     "starry_night": os.path.join(MODELS_DIR, "starry_night.pth"),
     "kandinsky": os.path.join(MODELS_DIR, "kandinsky_1.pth"),
     "scream": os.path.join(MODELS_DIR, "scream_1.pth"),
-    "gauguin": os.path.join(MODELS_DIR, "gauguin_1.pth")
+    "gauguin": os.path.join(MODELS_DIR, "gauguin_1.pth"),
+    "ed_hopper": os.path.join(MODELS_DIR, "EdHopper_1.pth")  # Added new model
 }
 
 # Default model
