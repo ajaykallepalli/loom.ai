@@ -131,7 +131,7 @@ def upload_image_to_gcs(image: Image.Image, bucket_name: str, blob_name: str) ->
         blob = bucket.blob(blob_name)
 
         img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG')  # Or PNG, adjust as needed
+        image.save(img_byte_arr, format='JPEG', quality=100)  # Or PNG, adjust as needed
         img_byte_arr.seek(0)
 
         blob.upload_from_file(img_byte_arr, content_type='image/jpeg')
@@ -281,7 +281,7 @@ async def stylize_fast_endpoint(
 
         # Save the stylized image to a bytes buffer
         img_byte_arr = io.BytesIO()
-        stylized_image_pil.save(img_byte_arr, format='JPEG')
+        stylized_image_pil.save(img_byte_arr, format='JPEG', quality=100)
         img_byte_arr.seek(0)
 
         # Return the image bytes directly in the response

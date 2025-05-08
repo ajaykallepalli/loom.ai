@@ -208,15 +208,20 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
 
     # Placeholder for the result image display
     result_placeholder = st.empty()
-    if st.session_state.slow_result_image:
-        result_placeholder.image(st.session_state.slow_result_image, caption="Stylized Result", use_container_width=True)
+    if st.session_state.get('slow_result_image_bytes'): # Check for bytes
+        result_placeholder.image(
+            st.session_state.slow_result_image_bytes, # Use bytes
+            caption="Stylized Result", 
+            use_container_width=True,
+            clamp=False
+        )
     else:
         result_placeholder.info("Upload content and style images and click 'Stylize!' in the sidebar.")
 
     # Stylize Button (only active if both images are uploaded)
     if st.sidebar.button("✨ Stylize!", disabled=(not content_file or not style_file), use_container_width=True, key="slow_button"):
         result_placeholder.info("Processing... this may take several minutes depending on settings.")
-        st.session_state.slow_result_image = None  # Clear previous result
+        st.session_state.slow_result_image_bytes = None  # Clear previous result bytes
 
         with st.spinner(f"Processing with {resolution_option} output..."):
             # 1. Upload images to GCS (only if storage client is available)
@@ -258,13 +263,19 @@ if transfer_mode == "Neural Style Transfer (Slow, Custom Style)":
                     # 3. Download and display result from GCS
                     if result_gcs_uri:
                         # Pass storage_client explicitly to cached function
-                        result_image = download_image_from_gcs(storage_client, result_gcs_uri)
-                        if result_image:
-                            st.session_state.slow_result_image = result_image  # Store in session state
+                        pil_image = download_image_from_gcs(storage_client, result_gcs_uri)
+                        if pil_image:
+                            # Convert PIL image to JPEG bytes with quality 100
+                            img_byte_arr = io.BytesIO()
+                            pil_image.save(img_byte_arr, format='JPEG', quality=100)
+                            img_byte_arr.seek(0)
+                            st.session_state.slow_result_image_bytes = img_byte_arr.getvalue()  # Store bytes
+                            
                             result_placeholder.image(
-                                result_image,
+                                st.session_state.slow_result_image_bytes, # Pass bytes
                                 caption=f"Stylized Result ({resolution_option})",
-                                use_container_width=True
+                                use_container_width=True,
+                                clamp=False # Ensure a wider range of pixel values can be processed by the browser.
                             )
                         else:
                             result_placeholder.error("Failed to download the result image from GCS.")
@@ -358,21 +369,31 @@ else:  # Fast Transfer
         }
         style_image_path = f"images/{style_image_map.get(style_model, style_model + '.jpg')}"
         try:
-            style_preview = Image.open(style_image_path)
-            st.image(style_preview, caption=f"Style: {style_model}", use_container_width=True)
-        except Exception:
+            # Read the image file as bytes and pass to st.image
+            with open(style_image_path, "rb") as f:
+                style_preview_bytes = f.read()
+            st.image(
+                style_preview_bytes, 
+                caption=f"Style: {style_model}", 
+                use_container_width=True,
+                clamp=False
+            )
+        except FileNotFoundError:
             st.warning(f"Style preview image not found: {style_image_path}")
+        except Exception as e:
+            st.error(f"Error loading style preview: {e}")
 
     st.markdown("--- ")
     st.subheader("Stylized Result")
 
     # Placeholder for result display
     fast_result_placeholder = st.empty()
-    if st.session_state.fast_result_image:
+    if st.session_state.get('fast_result_image_bytes'): # Check for bytes
         fast_result_placeholder.image(
-            st.session_state.fast_result_image,
+            st.session_state.fast_result_image_bytes, # Use bytes
             caption="Stylized Result",
-            use_container_width=True
+            use_container_width=True,
+            clamp=False
         )
     else:
         fast_result_placeholder.info("Upload a content image and click 'Apply Style' in the sidebar.")
@@ -380,7 +401,7 @@ else:  # Fast Transfer
     # Stylize Button (only active if content image uploaded)
     if st.sidebar.button("✨ Apply Style", disabled=not fast_content_file, use_container_width=True, key="fast_button"):
         fast_result_placeholder.info("Processing... this should only take a few seconds.")
-        st.session_state.fast_result_image = None  # Clear previous result
+        st.session_state.fast_result_image_bytes = None  # Clear previous result bytes
 
         with st.spinner(f"Applying {style_model} style..."):
             try:
@@ -407,12 +428,21 @@ else:  # Fast Transfer
 
                 # Success - process the image bytes directly from response
                 if response.status_code == 200:
-                    image = Image.open(io.BytesIO(response.content))
-                    st.session_state.fast_result_image = image  # Store in session state
-                    fast_result_placeholder.image(image, caption=f"Style: {style_model}", use_container_width=True)
+                    # response.content already contains JPEG bytes with quality=100 from the backend
+                    st.session_state.fast_result_image_bytes = response.content  # Store bytes
+                    
+                    # To display image dimensions, we still need to open it with PIL, but display the original bytes
+                    pil_for_size_check = Image.open(io.BytesIO(response.content))
+                    
+                    fast_result_placeholder.image(
+                        st.session_state.fast_result_image_bytes, # Pass raw bytes
+                        caption=f"Style: {style_model}", 
+                        use_container_width=True,
+                        clamp=False
+                    )
                     
                     # Display actual size that was processed
-                    st.sidebar.success(f"Success! Image size: {image.width}x{image.height}")
+                    st.sidebar.success(f"Success! Image size: {pil_for_size_check.width}x{pil_for_size_check.height}")
                 else:
                     st.error(f"Error: Received status code {response.status_code}")
                     fast_result_placeholder.error("Style transfer failed.")
