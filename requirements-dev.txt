@@ -17,3 +17,4 @@ mkdocs-material>=7.3.6
 # Testing
 pytest-mock>=3.6.1
 requests-mock>=1.9.3 
+jupyterlab>=4.4.8 # not directly required, pinned by Snyk to avoid a vulnerability
