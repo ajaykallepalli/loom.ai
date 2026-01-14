@@ -1,5 +1,5 @@
 # Core dependencies
-torch>=1.9.0
+torch>=2.9.0
 torchvision>=0.10.0
 numpy>=1.20.0
 pillow>=8.3.1
@@ -13,7 +13,7 @@ streamlit>=1.2.0
 httpx>=0.20.0
 
 # ML Infrastructure
-mlflow>=1.21.0
+mlflow>=3.5.0rc0
 metaflow>=2.4.1
 dvc>=2.8.0
 dvc[gs]>=2.8.0
@@ -25,3 +25,5 @@ pydantic>=1.8.2
 # Utilities
 PyYAML>=6.0
 tqdm>=4.62.3 
+urllib3>=2.6.3 # not directly required, pinned by Snyk to avoid a vulnerability
+werkzeug>=3.1.5 # not directly required, pinned by Snyk to avoid a vulnerability
