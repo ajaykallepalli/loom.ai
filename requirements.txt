@@ -1,5 +1,5 @@
 # Core dependencies
-torch>=1.9.0
+torch>=2.10.0
 torchvision>=0.10.0
 numpy>=1.20.0
 pillow>=8.3.1
@@ -8,7 +8,7 @@ matplotlib>=3.4.3
 # Web & API
 fastapi>=0.70.0
 uvicorn>=0.15.0
-python-multipart>=0.0.5
+python-multipart>=0.0.22
 streamlit>=1.2.0
 httpx>=0.20.0
 
@@ -25,3 +25,4 @@ pydantic>=1.8.2
 # Utilities
 PyYAML>=6.0
 tqdm>=4.62.3 
+wheel>=0.46.2 # not directly required, pinned by Snyk to avoid a vulnerability
